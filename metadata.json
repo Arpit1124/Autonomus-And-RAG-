@@ -1,0 +1,6 @@
+{
+  "name": "WaferGuard AI — Autonomous Semiconductor Quality Inspection & Root-Cause Analysis",
+  "description": "Industrial AI Quality Inspection and Root-Cause Analysis Platform for semiconductor wafer and manufacturing inspection, featuring computer vision defect detection, autonomous quality engineer agent, RAG knowledge base, machine correlation, and automated reporting.",
+  "requestFramePermissions": ["camera", "microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
