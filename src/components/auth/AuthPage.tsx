@@ -24,7 +24,8 @@ import {
   FileCheck,
   ShieldCheck,
   Zap,
-  Info
+  Info,
+  X
 } from 'lucide-react';
 import { UserProfile, UserRole } from '../../types';
 import { api } from '../../services/api';
@@ -89,6 +90,18 @@ export const AuthPage: React.FC<Props> = ({
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [activePersonaId, setActivePersonaId] = useState<string | null>(null);
   const [lockoutSec, setLockoutSec] = useState<number | null>(null);
+  const [displayedLogoutNotice, setDisplayedLogoutNotice] = useState<string | null>(logoutReason || null);
+
+  // Auto-dismiss Session Security Notice after 5 seconds (5000ms)
+  useEffect(() => {
+    setDisplayedLogoutNotice(logoutReason || null);
+    if (logoutReason) {
+      const timer = setTimeout(() => {
+        setDisplayedLogoutNotice(null);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [logoutReason]);
 
   // Rate Limit Lockout Timer Countdown
   useEffect(() => {
@@ -488,13 +501,23 @@ export const AuthPage: React.FC<Props> = ({
           </p>
         </div>
 
-        {/* Session Expiry or Logout Notice */}
-        {logoutReason && (
-          <div className="p-3.5 rounded-xl bg-amber-950/60 border border-amber-500/50 flex items-center gap-3 text-amber-200 text-xs font-mono">
+        {/* Session Expiry or Logout Notice (Auto-dismisses in 5s) */}
+        {displayedLogoutNotice && (
+          <div className="p-3.5 rounded-xl bg-amber-950/60 border border-amber-500/50 flex items-center gap-3 text-amber-200 text-xs font-mono transition-all duration-300 animate-in fade-in slide-in-from-top-1">
             <Clock className="w-4 h-4 text-amber-400 shrink-0" />
-            <div className="flex-1">
-              <span className="font-bold">Session Security Notice: </span>
-              <span>{logoutReason}</span>
+            <div className="flex-1 flex items-center justify-between gap-2">
+              <div>
+                <span className="font-bold">Session Security Notice: </span>
+                <span>{displayedLogoutNotice}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDisplayedLogoutNotice(null)}
+                className="text-amber-400/70 hover:text-amber-200 p-1 rounded-md transition hover:bg-amber-900/40 cursor-pointer"
+                title="Dismiss notice"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
             </div>
           </div>
         )}

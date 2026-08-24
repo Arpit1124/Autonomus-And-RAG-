@@ -241,6 +241,15 @@ How can I assist you with wafer metrology, root-cause decomposition, or correcti
 
   // 2. 24-Hour Session Expiry & 5-Minute Warning Modal Timer
   useEffect(() => {
+    if (logoutReason) {
+      const timer = setTimeout(() => {
+        setLogoutReason(null);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [logoutReason]);
+
+  useEffect(() => {
     if (!authSession) return;
 
     const interval = setInterval(() => {
