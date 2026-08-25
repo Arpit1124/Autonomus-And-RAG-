@@ -16,7 +16,9 @@ import {
   AlertTriangle,
   Microscope,
   Lock,
-  Clock
+  Clock,
+  Activity,
+  Gauge
 } from 'lucide-react';
 import { UserProfile } from '../types';
 import { WaferLogo } from './common/WaferLogo';
@@ -26,6 +28,7 @@ export type NavTab =
   | 'rca'
   | 'taxonomy'
   | 'machines'
+  | 'predictive'
   | 'history'
   | 'knowledge'
   | 'copilot'
@@ -92,6 +95,14 @@ export const Sidebar: React.FC<Props> = ({
       badgeColor: anomalyDetected 
         ? 'bg-red-500/20 text-red-400 border border-red-500/30 animate-pulse'
         : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30',
+      allowed: true
+    },
+    {
+      id: 'predictive' as NavTab,
+      label: 'Predictive Maintenance',
+      icon: Activity,
+      badge: 'Chamber RUL',
+      badgeColor: 'bg-rose-500/20 text-rose-400 border border-rose-500/30 animate-pulse',
       allowed: true
     },
     {

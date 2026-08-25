@@ -10,6 +10,7 @@ export type NavTab =
   | 'knowledge'
   | 'historical'
   | 'machines'
+  | 'predictive'
   | 'analytics'
   | 'copilot'
   | 'approvals'
@@ -502,11 +503,12 @@ export interface AuditLogEntry {
 
 export interface ToastNotification {
   id: string;
-  type: 'success' | 'error' | 'warning' | 'info' | 'approval';
+  type: 'success' | 'error' | 'warning' | 'info' | 'approval' | 'critical';
   title: string;
   message: string;
   timestamp: string;
   durationMs?: number;
+  autoDismissMs?: number;
   actionLabel?: string;
   onAction?: () => void;
   targetTab?: NavTab;
@@ -667,3 +669,183 @@ export interface ChartDataConfig {
   xAxisKey: string;
   dataKeys: string[];
 }
+
+// ==========================================
+// Real-Time Operator Presence & Lock Types
+// ==========================================
+export type OperatorStatus = 'VIEWING' | 'MODIFYING' | 'IDLE';
+
+export interface ActiveOperator {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  avatarColor: string;
+  station: string;
+  bay: string;
+  status: OperatorStatus;
+  actionDetail: string;
+  currentWaferId: string;
+  joinedAt: number;
+  lastActive: number;
+  isEditing: boolean;
+  lockedSection?: string;
+  deviceType: 'terminal' | 'cleanroom_hud' | 'tablet' | 'workstation';
+}
+
+export interface OperatorLockInfo {
+  isLocked: boolean;
+  lockedBy?: ActiveOperator;
+  lockedSection?: string;
+  lockedAt?: number;
+  conflictDetected: boolean;
+  conflictMessage?: string;
+}
+
+export interface WebSocketPresenceEvent {
+  type: 'PRESENCE_SYNC' | 'OPERATOR_JOIN' | 'OPERATOR_LEAVE' | 'STATUS_UPDATE' | 'LOCK_ACQUIRED' | 'LOCK_RELEASED' | 'CONFLICT_ALERT' | 'PING_OPERATOR';
+  timestamp: number;
+  waferId: string;
+  operator?: ActiveOperator;
+  operators?: ActiveOperator[];
+  lockInfo?: OperatorLockInfo;
+  message?: string;
+  senderId?: string;
+  targetId?: string;
+}
+
+// ==========================================
+// Predictive Maintenance & Chamber Telemetry Forecasting Types
+// ==========================================
+
+export type FailureRiskLevel = 'CRITICAL_IMMINENT' | 'HIGH_PRECURSOR' | 'MODERATE_DRIFT' | 'HEALTHY_NOMINAL';
+
+export interface SensorTrendPoint {
+  timestamp: string; // ISO or relative time e.g. "-12h", "now", "+6h"
+  timeHour: number;  // -24 to +48 hours
+  observedValue: number;
+  forecastMean: number;
+  upperConfidence: number; // +2 sigma
+  lowerConfidence: number; // -2 sigma
+  warningThreshold: number;
+  criticalThreshold: number;
+  unit: string;
+  isProjected: boolean;
+}
+
+export interface DegradationFactor {
+  parameter: string; // e.g. "RF Impedance Reflection", "ESC He Backside Leak Rate", "Turbopump Bearing FFT Vibration"
+  currentValue: number;
+  nominalValue: number;
+  unit: string;
+  driftPercentage: number;
+  contributionToFailure: number; // 0 - 100%
+  degradationRatePerHour: number;
+  status: 'nominal' | 'warning' | 'anomaly';
+  sensorId: string;
+}
+
+export interface PreventiveActionRecommendation {
+  id: string;
+  title: string;
+  chamberId: string;
+  machineId: string;
+  recommendedAction: string;
+  deadlineHours: number;
+  estimatedDowntimeMinutes: number;
+  riskIfIgnored: string;
+  priority: 'P0' | 'P1' | 'P2';
+  estimatedCostSavingsUsd: number;
+  procedureRef: string;
+  isAutomatedCleanRoutine: boolean;
+}
+
+export interface PredictiveChamberForecast {
+  chamberId: string;
+  chamberName: string;
+  machineId: string;
+  machineName: string;
+  stationType: string;
+  location: string;
+  healthScore: number; // 0-100%
+  remainingUsefulLifeHours: number; // RUL in hours e.g. 14.5 hrs
+  failureProbability24h: number; // 0-100%
+  failureProbability72h: number; // 0-100%
+  failureProbability7d: number; // 0-100%
+  riskLevel: FailureRiskLevel;
+  primaryFailureMode: string; // e.g. "RF Plasma Arc Discharge & ESC Clamping Failure"
+  weibullBeta: number; // Shape parameter (>1 means wear-out degradation)
+  weibullEta: number; // Characteristic life (hrs)
+  mtbfHours: number;
+  telemetryTrends: {
+    rfPower: SensorTrendPoint[];
+    pressure: SensorTrendPoint[];
+    temperature: SensorTrendPoint[];
+    vibration: SensorTrendPoint[];
+    gasFlow: SensorTrendPoint[];
+  };
+  degradationFactors: DegradationFactor[];
+  recommendedActions: PreventiveActionRecommendation[];
+  historicalFailureCorrelations: Array<{
+    date: string;
+    waferLot: string;
+    rootCause: string;
+    downtimeHours: number;
+    similarityScore: number;
+  }>;
+}
+
+// ==========================================
+// Custom Voice Trigger & Macro Sequence Types
+// ==========================================
+
+export type VoiceTriggerActionType = 
+  | 'RUN_INSPECTION'
+  | 'CALIBRATE_CHAMBER'
+  | 'PURGE_GAS_LINE'
+  | 'QUARANTINE_LOT'
+  | 'RUN_DEEP_RCA'
+  | 'EXPORT_EXECUTIVE_REPORT'
+  | 'EXPORT_TECHNICAL_REPORT'
+  | 'NAVIGATE_TAB'
+  | 'COPILOT_DIAGNOSE'
+  | 'BATCH_APPROVE_HITL'
+  | 'TOGGLE_HEATMAP';
+
+export interface CustomVoiceTrigger {
+  id: string;
+  triggerPhrase: string; // e.g. "Run standard etch inspection"
+  description: string;
+  actionType: VoiceTriggerActionType;
+  actionPayload?: Record<string, any>;
+  confirmationSpeech: string; // e.g. "Executing standard dry plasma etch inspection sequence."
+  category: 'inspection' | 'maintenance' | 'reports' | 'rca' | 'governance';
+  isEnabled: boolean;
+  isSystemDefault?: boolean;
+  usageCount: number;
+  lastTriggered?: string;
+  createdAt: string;
+}
+
+// ==========================================
+// Inspection Report Template Types
+// ==========================================
+
+export type ReportTemplateType = 
+  | 'technical_detail' 
+  | 'executive_summary' 
+  | 'full_technical' 
+  | 'summary_executive';
+
+export interface InspectionReportTemplateOptions {
+  template: ReportTemplateType;
+  includeWaferCanvas: boolean;
+  includeDefectTable: boolean;
+  includeRCA: boolean;
+  includeCorrectiveActions: boolean;
+  includeFinancialImpact: boolean;
+  includeSignatures: boolean;
+  includeRawTelemetry: boolean;
+}
+
+

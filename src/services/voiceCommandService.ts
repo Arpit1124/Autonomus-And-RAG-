@@ -1,13 +1,101 @@
 // Cleanroom Voice Command Service for Semiconductor Operations
 import { NavTab } from '../components/Sidebar';
+import { CustomVoiceTrigger } from '../types';
 
 export interface VoiceCommandMatch {
   action: string;
-  category: 'navigation' | 'inspection' | 'rca' | 'hitl' | 'copilot' | 'maintenance' | 'audio' | 'general';
+  category: 'navigation' | 'inspection' | 'rca' | 'hitl' | 'copilot' | 'maintenance' | 'audio' | 'general' | 'reports' | 'governance';
   description: string;
   feedbackText: string;
   payload?: any;
 }
+
+export const DEFAULT_CUSTOM_VOICE_TRIGGERS: CustomVoiceTrigger[] = [
+  {
+    id: 'vt-01',
+    triggerPhrase: 'Run standard etch inspection',
+    description: 'Executes automated optical & SEM inspection filtered to dry plasma etch gate parameters',
+    actionType: 'RUN_INSPECTION',
+    actionPayload: { recipe: 'POLY-GATE-ETCH-V4', processStage: 'Dry Plasma Etch', autoScan: true },
+    confirmationSpeech: 'Executing standard dry plasma poly gate etch inspection sequence.',
+    category: 'inspection',
+    isEnabled: true,
+    isSystemDefault: true,
+    usageCount: 14,
+    lastTriggered: '2026-08-24T05:40:00Z',
+    createdAt: '2026-08-01T00:00:00Z'
+  },
+  {
+    id: 'vt-02',
+    triggerPhrase: 'Flag wafer for SEM review',
+    description: 'Marks active wafer as quarantined and triggers high-resolution SEM metrology task',
+    actionType: 'RUN_DEEP_RCA',
+    actionPayload: { triggerSemReview: true, targetStation: 'Station-02 High-NA SEM' },
+    confirmationSpeech: 'Wafer flagged for automated SEM review and causal investigation.',
+    category: 'inspection',
+    isEnabled: true,
+    isSystemDefault: true,
+    usageCount: 8,
+    lastTriggered: '2026-08-23T14:15:00Z',
+    createdAt: '2026-08-01T00:00:00Z'
+  },
+  {
+    id: 'vt-03',
+    triggerPhrase: 'Calibrate chamber vacuum',
+    description: 'Dispatches automated vacuum pressure calibration routine to Tool M-03 Chamber B',
+    actionType: 'CALIBRATE_CHAMBER',
+    actionPayload: { machineId: 'M-03', chamber: 'CH-B', taskType: 'CALIBRATION', title: 'Chamber B Vacuum & Pressure Re-zero' },
+    confirmationSpeech: 'Initiating chamber vacuum and pressure transducer calibration sequence.',
+    category: 'maintenance',
+    isEnabled: true,
+    isSystemDefault: true,
+    usageCount: 5,
+    lastTriggered: '2026-08-22T09:20:00Z',
+    createdAt: '2026-08-01T00:00:00Z'
+  },
+  {
+    id: 'vt-04',
+    triggerPhrase: 'Trigger lot quarantine',
+    description: 'Locks current wafer lot from advancing to photolithography and generates P0 CAPA',
+    actionType: 'QUARANTINE_LOT',
+    actionPayload: { lotId: 'LOT-9921-X', reason: 'Critical edge crack defect cluster' },
+    confirmationSpeech: 'Emergency quarantine protocol active. Lot locked and P0 corrective action order logged.',
+    category: 'governance',
+    isEnabled: true,
+    isSystemDefault: true,
+    usageCount: 3,
+    lastTriggered: '2026-08-20T11:05:00Z',
+    createdAt: '2026-08-01T00:00:00Z'
+  },
+  {
+    id: 'vt-05',
+    triggerPhrase: 'Generate executive summary report',
+    description: 'Compiles inspection findings into executive yield format and opens report certification',
+    actionType: 'EXPORT_EXECUTIVE_REPORT',
+    actionPayload: { template: 'executive_summary' },
+    confirmationSpeech: 'Compiling Executive Summary Quality Certification report.',
+    category: 'reports',
+    isEnabled: true,
+    isSystemDefault: true,
+    usageCount: 19,
+    lastTriggered: '2026-08-24T05:12:00Z',
+    createdAt: '2026-08-01T00:00:00Z'
+  },
+  {
+    id: 'vt-06',
+    triggerPhrase: 'Open predictive maintenance',
+    description: 'Switches to the Chamber Failure Forecasting & Predictive Maintenance module',
+    actionType: 'NAVIGATE_TAB',
+    actionPayload: { tab: 'predictive' },
+    confirmationSpeech: 'Navigating to Predictive Maintenance and Chamber Telemetry Forecasting.',
+    category: 'maintenance',
+    isEnabled: true,
+    isSystemDefault: true,
+    usageCount: 12,
+    lastTriggered: '2026-08-24T06:00:00Z',
+    createdAt: '2026-08-01T00:00:00Z'
+  }
+];
 
 export interface MachineMaintenancePayload {
   machineId: string;
@@ -78,6 +166,7 @@ export class VoiceCommandService {
   private onCommandMatchedCallback?: (match: VoiceCommandMatch) => void;
   private onListeningStateCallback?: (isListening: boolean) => void;
   private onErrorCallback?: (error: string) => void;
+  private customTriggers: CustomVoiceTrigger[] = [];
 
   constructor() {
     if (typeof window !== 'undefined') {
@@ -94,7 +183,79 @@ export class VoiceCommandService {
       if ('speechSynthesis' in window) {
         this.speechSynth = window.speechSynthesis;
       }
+
+      this.loadCustomTriggers();
     }
+  }
+
+  // Load custom triggers from LocalStorage or fall back to default cleanroom triggers
+  public loadCustomTriggers(): CustomVoiceTrigger[] {
+    if (typeof window === 'undefined') {
+      this.customTriggers = DEFAULT_CUSTOM_VOICE_TRIGGERS;
+      return this.customTriggers;
+    }
+    try {
+      const saved = localStorage.getItem('waferguard_custom_voice_triggers');
+      if (saved) {
+        this.customTriggers = JSON.parse(saved);
+      } else {
+        this.customTriggers = [...DEFAULT_CUSTOM_VOICE_TRIGGERS];
+        this.saveCustomTriggers(this.customTriggers);
+      }
+    } catch {
+      this.customTriggers = [...DEFAULT_CUSTOM_VOICE_TRIGGERS];
+    }
+    return this.customTriggers;
+  }
+
+  public getCustomTriggers(): CustomVoiceTrigger[] {
+    if (!this.customTriggers || this.customTriggers.length === 0) {
+      this.loadCustomTriggers();
+    }
+    return this.customTriggers;
+  }
+
+  public saveCustomTriggers(triggers: CustomVoiceTrigger[]): void {
+    this.customTriggers = triggers;
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('waferguard_custom_voice_triggers', JSON.stringify(triggers));
+      } catch (e) {
+        console.warn('Failed to save custom voice triggers to localStorage:', e);
+      }
+    }
+  }
+
+  public addCustomTrigger(triggerData: Omit<CustomVoiceTrigger, 'id' | 'createdAt' | 'usageCount'>): CustomVoiceTrigger {
+    const newTrigger: CustomVoiceTrigger = {
+      ...triggerData,
+      id: `vt-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      createdAt: new Date().toISOString(),
+      usageCount: 0
+    };
+    const updated = [newTrigger, ...this.getCustomTriggers()];
+    this.saveCustomTriggers(updated);
+    return newTrigger;
+  }
+
+  public updateCustomTrigger(id: string, updates: Partial<CustomVoiceTrigger>): CustomVoiceTrigger[] {
+    const current = this.getCustomTriggers();
+    const updated = current.map(t => t.id === id ? { ...t, ...updates } : t);
+    this.saveCustomTriggers(updated);
+    return updated;
+  }
+
+  public deleteCustomTrigger(id: string): CustomVoiceTrigger[] {
+    const current = this.getCustomTriggers();
+    const updated = current.filter(t => t.id !== id);
+    this.saveCustomTriggers(updated);
+    return updated;
+  }
+
+  public resetCustomTriggersToDefault(): CustomVoiceTrigger[] {
+    this.customTriggers = [...DEFAULT_CUSTOM_VOICE_TRIGGERS];
+    this.saveCustomTriggers(this.customTriggers);
+    return this.customTriggers;
   }
 
   // Synthesize crystal-clear cleanroom auditory chimes using Web Audio API
@@ -401,28 +562,53 @@ export class VoiceCommandService {
     let matched: VoiceCommandMatch | null = null;
 
     // ==========================================
-    // 1. DEEP DIAGNOSTIC (AI Multi-Source RCA)
+    // 0. CUSTOM USER-DEFINED VOICE TRIGGERS (PRIORITY)
     // ==========================================
-    if (
-      text.includes('deep diagnostic') ||
-      text.includes('run deep diagnostic') ||
-      text.includes('deep diagnose') ||
-      text.includes('deep root cause') ||
-      text.includes('investigate root cause') ||
-      text.includes('investigate defect') ||
-      text.includes('deep investigate') ||
-      text.includes('diagnose wafer defect') ||
-      text.includes('root cause investigation') ||
-      text.includes('investigate cause')
-    ) {
-      matched = {
-        action: 'DEEP_DIAGNOSTIC',
-        category: 'rca',
-        description: 'Initiated Deep AI Root-Cause Diagnostic Investigation',
-        feedbackText: 'Deep diagnostic initiated. Synthesizing multi-source causal telemetry.',
-        payload: { autoRun: true }
-      };
+    const activeCustomTriggers = this.getCustomTriggers().filter(t => t.isEnabled);
+    for (const customTrigger of activeCustomTriggers) {
+      const phrase = customTrigger.triggerPhrase.trim().toLowerCase();
+      if (text.includes(phrase) || phrase.includes(text) && text.length > 5) {
+        // Increment usage count and update timestamp
+        customTrigger.usageCount = (customTrigger.usageCount || 0) + 1;
+        customTrigger.lastTriggered = new Date().toISOString();
+        this.saveCustomTriggers(this.customTriggers);
+
+        matched = {
+          action: customTrigger.actionType,
+          category: customTrigger.category as any,
+          description: `Custom Trigger Executed: "${customTrigger.triggerPhrase}"`,
+          feedbackText: customTrigger.confirmationSpeech || `Executing ${customTrigger.triggerPhrase}.`,
+          payload: customTrigger.actionPayload || {}
+        };
+        break;
+      }
     }
+
+    // If no custom trigger matched, fall back to built-in cleanroom actions
+    if (!matched) {
+      // ==========================================
+      // 1. DEEP DIAGNOSTIC (AI Multi-Source RCA)
+      // ==========================================
+      if (
+        text.includes('deep diagnostic') ||
+        text.includes('run deep diagnostic') ||
+        text.includes('deep diagnose') ||
+        text.includes('deep root cause') ||
+        text.includes('investigate root cause') ||
+        text.includes('investigate defect') ||
+        text.includes('deep investigate') ||
+        text.includes('diagnose wafer defect') ||
+        text.includes('root cause investigation') ||
+        text.includes('investigate cause')
+      ) {
+        matched = {
+          action: 'DEEP_DIAGNOSTIC',
+          category: 'rca',
+          description: 'Initiated Deep AI Root-Cause Diagnostic Investigation',
+          feedbackText: 'Deep diagnostic initiated. Synthesizing multi-source causal telemetry.',
+          payload: { autoRun: true }
+        };
+      }
 
     // ==========================================
     // 2. MACHINE MAINTENANCE VOICE ACTIONS
@@ -867,6 +1053,7 @@ export class VoiceCommandService {
         feedbackText: 'Audio feedback active.'
       };
     }
+  }
 
     if (matched) {
       // Play auditory feedback chime when command is successfully parsed

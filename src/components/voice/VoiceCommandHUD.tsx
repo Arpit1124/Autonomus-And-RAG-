@@ -22,7 +22,11 @@ import {
   RotateCcw,
   Gauge,
   Flame,
-  Volume1
+  Volume1,
+  History,
+  Trash2,
+  Play,
+  Clock
 } from 'lucide-react';
 import { 
   globalVoiceService, 
@@ -31,6 +35,15 @@ import {
   MachineMaintenancePayload 
 } from '../../services/voiceCommandService';
 import { NavTab } from '../Sidebar';
+
+export interface VoiceCommandHistoryEntry {
+  id: string;
+  rawTranscript: string;
+  action: string;
+  description: string;
+  timestamp: number;
+  success: boolean;
+}
 
 interface Props {
   activeTab: NavTab;
@@ -48,6 +61,34 @@ interface Props {
   isInspecting?: boolean;
   isDeepInvestigating?: boolean;
 }
+
+// Initial default cleanroom history items
+const INITIAL_COMMAND_HISTORY: VoiceCommandHistoryEntry[] = [
+  {
+    id: 'cmd-hist-1',
+    rawTranscript: 'run deep diagnostic',
+    action: 'DEEP_DIAGNOSTIC',
+    description: 'Triggered automated 5-Whys root-cause diagnostic on Tool M-03',
+    timestamp: Date.now() - 1000 * 60 * 3,
+    success: true
+  },
+  {
+    id: 'cmd-hist-2',
+    rawTranscript: 'calibrate chamber b',
+    action: 'MAINTENANCE_ACTION',
+    description: 'Chamber B thermal drift auto-recalibration requested',
+    timestamp: Date.now() - 1000 * 60 * 8,
+    success: true
+  },
+  {
+    id: 'cmd-hist-3',
+    rawTranscript: 'run inspection on wafer w-9921',
+    action: 'RUN_INSPECTION',
+    description: 'Executed AI vision model defect detection on Wafer W-9921',
+    timestamp: Date.now() - 1000 * 60 * 14,
+    success: true
+  }
+];
 
 export const VoiceCommandHUD: React.FC<Props> = ({
   activeTab,
@@ -75,6 +116,33 @@ export const VoiceCommandHUD: React.FC<Props> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [visualLevels, setVisualLevels] = useState<number[]>([15, 25, 40, 60, 45, 20, 30, 50, 20]);
   const [chimePlayedFlash, setChimePlayedFlash] = useState(false);
+  const [commandHistory, setCommandHistory] = useState<VoiceCommandHistoryEntry[]>(() => {
+    try {
+      const saved = localStorage.getItem('waferguard_voice_command_history');
+      if (saved) return JSON.parse(saved).slice(0, 5);
+    } catch (e) {}
+    return INITIAL_COMMAND_HISTORY;
+  });
+
+  // Save history to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('waferguard_voice_command_history', JSON.stringify(commandHistory.slice(0, 5)));
+    } catch (e) {}
+  }, [commandHistory]);
+
+  const addCommandToHistory = (match: VoiceCommandMatch, rawText: string) => {
+    const newEntry: VoiceCommandHistoryEntry = {
+      id: `cmd-hist-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      rawTranscript: rawText || match.description,
+      action: match.action,
+      description: match.description,
+      timestamp: Date.now(),
+      success: true
+    };
+
+    setCommandHistory(prev => [newEntry, ...prev.filter(e => e.id !== newEntry.id)].slice(0, 5));
+  };
 
   // Audio animation loop when listening
   useEffect(() => {
@@ -100,6 +168,7 @@ export const VoiceCommandHUD: React.FC<Props> = ({
         setChimePlayedFlash(true);
         setTimeout(() => setChimePlayedFlash(false), 800);
         executeCommandAction(match);
+        addCommandToHistory(match, transcript || match.description);
         setTimeout(() => {
           setRecentMatch(null);
         }, 4500);
@@ -131,7 +200,7 @@ export const VoiceCommandHUD: React.FC<Props> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeTab, onTriggerDeepDiagnostic, onTriggerMaintenanceAction]);
+  }, [activeTab, onTriggerDeepDiagnostic, onTriggerMaintenanceAction, transcript]);
 
   const executeCommandAction = (match: VoiceCommandMatch) => {
     switch (match.action) {
@@ -193,11 +262,14 @@ export const VoiceCommandHUD: React.FC<Props> = ({
   const handleManualCommandSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!manualText.trim()) return;
-    setTranscript(manualText);
-    const match = globalVoiceService.processVoiceCommand(manualText);
+    const text = manualText;
+    setTranscript(text);
+    const match = globalVoiceService.processVoiceCommand(text);
     if (!match) {
-      setErrorMessage(`No matching cleanroom command found for: "${manualText}". Try saying "run deep diagnostic" or "calibrate chamber B".`);
+      setErrorMessage(`No matching cleanroom command found for: "${text}". Try saying "run deep diagnostic" or "calibrate chamber B".`);
       setTimeout(() => setErrorMessage(null), 4000);
+    } else {
+      addCommandToHistory(match, text);
     }
     setManualText('');
   };
@@ -221,6 +293,24 @@ export const VoiceCommandHUD: React.FC<Props> = ({
     setTimeout(() => setChimePlayedFlash(false), 500);
   };
 
+  const handleReplayCommand = (entry: VoiceCommandHistoryEntry) => {
+    setTranscript(entry.rawTranscript);
+    const match = globalVoiceService.processVoiceCommand(entry.rawTranscript);
+    if (match) {
+      addCommandToHistory(match, entry.rawTranscript);
+    }
+  };
+
+  const formatTimeAgo = (ts: number): string => {
+    const diff = Math.max(0, Date.now() - ts);
+    const secs = Math.floor(diff / 1000);
+    if (secs < 30) return 'Just now';
+    if (secs < 60) return `${secs}s ago`;
+    const mins = Math.floor(secs / 60);
+    if (mins < 60) return `${mins}m ago`;
+    return `${Math.floor(mins / 60)}h ago`;
+  };
+
   const quickVoicePrompts = [
     { label: 'Deep Diagnostic', cmd: 'run deep diagnostic', icon: BrainCircuit, color: 'text-indigo-300 bg-indigo-950/60 border-indigo-500/40' },
     { label: 'Calibrate Chamber B', cmd: 'trigger chamber b calibration', icon: Wrench, color: 'text-amber-300 bg-amber-950/60 border-amber-500/40' },
@@ -239,7 +329,7 @@ export const VoiceCommandHUD: React.FC<Props> = ({
           isListening 
             ? 'bg-[#0a0a14]/95 border-indigo-500/80 shadow-indigo-500/20' 
             : 'bg-[#0a0a12]/90 border-[#222234] backdrop-blur-md'
-        } ${isExpanded ? 'w-80 sm:w-96' : 'w-auto'}`}>
+        } ${isExpanded ? 'w-80 sm:w-[420px]' : 'w-auto'}`}>
           
           {/* Collapsed / Main Bar */}
           <div className="p-2.5 flex items-center gap-2.5 justify-between">
@@ -350,7 +440,7 @@ export const VoiceCommandHUD: React.FC<Props> = ({
 
           {/* Expanded Drawer */}
           {isExpanded && (
-            <div className="p-3 border-t border-[#1f1f30] bg-[#0c0c16]/95 space-y-2.5">
+            <div className="p-3 border-t border-[#1f1f30] bg-[#0c0c16]/95 space-y-3 max-h-[480px] overflow-y-auto">
               {/* Live Transcript / Feedback Banner */}
               <div className="bg-[#121222] border border-[#23233c] rounded-xl p-2.5 space-y-1.5">
                 <div className="flex items-center justify-between text-[10px] text-[#71717a]">
@@ -394,6 +484,83 @@ export const VoiceCommandHUD: React.FC<Props> = ({
                 )}
               </div>
 
+              {/* Command History Log (Last 5 voice commands triggered by user) */}
+              <div className="bg-[#10101c] border border-[#202034] rounded-xl p-2.5 space-y-2">
+                <div className="flex items-center justify-between text-[10px]">
+                  <span className="text-zinc-300 font-bold flex items-center gap-1.5">
+                    <History className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>Command History (Last 5 Triggers)</span>
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[9px] text-zinc-500 font-mono">
+                      {commandHistory.length}/5
+                    </span>
+                    {commandHistory.length > 0 && (
+                      <button
+                        type="button"
+                        id="clear-voice-history-btn"
+                        onClick={() => setCommandHistory([])}
+                        className="text-[9px] text-zinc-500 hover:text-zinc-300 flex items-center gap-0.5 transition cursor-pointer"
+                        title="Clear command history"
+                      >
+                        <Trash2 className="w-2.5 h-2.5" />
+                        <span>Clear</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {commandHistory.length === 0 ? (
+                  <div className="text-[10px] text-zinc-500 italic py-1.5 text-center">
+                    No voice commands executed in this session yet.
+                  </div>
+                ) : (
+                  <div className="space-y-1.5">
+                    {commandHistory.map((item) => (
+                      <div
+                        key={item.id}
+                        id={`cmd-history-item-${item.id}`}
+                        className="p-2 rounded-lg bg-[#161626] border border-[#262640] hover:border-indigo-500/40 transition flex items-center justify-between gap-2 group text-[10px]"
+                      >
+                        <div className="flex items-start gap-2 min-w-0 flex-1">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-mono font-bold text-zinc-100 truncate">
+                                "{item.rawTranscript}"
+                              </span>
+                              <span className="text-[8px] font-mono px-1 py-0.2 rounded bg-indigo-950 text-indigo-300 border border-indigo-500/30 uppercase shrink-0">
+                                {item.action}
+                              </span>
+                            </div>
+                            <div className="text-[9px] text-zinc-400 truncate mt-0.5">
+                              {item.description}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <span className="text-[9px] text-zinc-500 font-mono flex items-center gap-0.5">
+                            <Clock className="w-2.5 h-2.5" />
+                            {formatTimeAgo(item.timestamp)}
+                          </span>
+
+                          <button
+                            type="button"
+                            id={`replay-cmd-${item.id}`}
+                            onClick={() => handleReplayCommand(item)}
+                            title="Re-execute command"
+                            className="p-1 rounded bg-[#202034] hover:bg-indigo-600 text-zinc-300 hover:text-white transition cursor-pointer opacity-80 group-hover:opacity-100"
+                          >
+                            <Play className="w-2.5 h-2.5 fill-current" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               {/* Quick Voice Chips */}
               <div>
                 <div className="text-[9px] text-[#71717a] font-bold mb-1.5 flex items-center justify-between">
@@ -409,7 +576,10 @@ export const VoiceCommandHUD: React.FC<Props> = ({
                         type="button"
                         onClick={() => {
                           setTranscript(p.cmd);
-                          globalVoiceService.processVoiceCommand(p.cmd);
+                          const match = globalVoiceService.processVoiceCommand(p.cmd);
+                          if (match) {
+                            addCommandToHistory(match, p.cmd);
+                          }
                         }}
                         className={`text-[10px] px-2 py-1 rounded-lg border transition cursor-pointer flex items-center gap-1 font-mono hover:scale-102 ${p.color}`}
                       >

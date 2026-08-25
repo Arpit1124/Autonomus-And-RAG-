@@ -1,52 +1,56 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { DefectItem, DefectSeverity } from '../types';
+import React, { useState, useRef, useMemo } from 'react';
 import { 
   ZoomIn, 
   ZoomOut, 
-  RotateCcw, 
+  Maximize2, 
+  Layers, 
+  Grid, 
   Eye, 
   EyeOff, 
-  Maximize2, 
-  Grid, 
-  Layers, 
-  Sparkles, 
   Crosshair, 
-  Flame, 
-  Sliders,
-  Move,
-  Tag
+  Sliders, 
+  Flame,
+  AlertTriangle,
+  Radio,
+  Tag,
+  ShieldAlert,
+  Info
 } from 'lucide-react';
+import { DefectItem, DefectSeverity } from '../types';
 
 interface Props {
   waferId: string;
-  diameterMm?: number;
+  diameterMm: number;
   defects: DefectItem[];
-  selectedDefectId?: string | null;
-  onSelectDefect?: (defect: DefectItem | null) => void;
-  viewMode?: 'annotated' | 'original' | 'split';
+  selectedDefectId?: string;
+  onSelectDefect?: (defect: DefectItem) => void;
   isInspecting?: boolean;
+  initialViewMode?: 'annotated' | 'original' | 'split';
 }
 
 export const WaferInspectionCanvas: React.FC<Props> = ({
   waferId,
-  diameterMm = 300,
+  diameterMm,
   defects,
   selectedDefectId,
   onSelectDefect,
-  viewMode: initialViewMode = 'annotated',
-  isInspecting = false
+  isInspecting = false,
+  initialViewMode = 'annotated'
 }) => {
   const [zoomLevel, setZoomLevel] = useState<number>(1);
   const [panOffset, setPanOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const [dragStart, setDragStart] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   
-  // Toggles
+  // Layer Toggles
   const [showAnnotations, setShowAnnotations] = useState<boolean>(true);
-  const [showLabels, setShowLabels] = useState<boolean>(true);
   const [showGrid, setShowGrid] = useState<boolean>(true);
-  const [showHeatmap, setShowHeatmap] = useState<boolean>(false);
-  const [showDieCoords, setShowDieCoords] = useState<boolean>(true);
+  const [showHeatmap, setShowHeatmap] = useState<boolean>(true);
+  const [showLabels, setShowLabels] = useState<boolean>(true);
+  const [heatmapIntensity, setHeatmapIntensity] = useState<'standard' | 'high' | 'ultra'>('high');
+  const [highlightFailureRegions, setHighlightFailureRegions] = useState<boolean>(true);
+  
+  // View Modes: 'annotated', 'original', 'split'
   const [viewMode, setViewMode] = useState<'annotated' | 'original' | 'split'>(initialViewMode);
   const [splitPosition, setSplitPosition] = useState<number>(50); // percentage for split slider
 
@@ -130,10 +134,92 @@ export const WaferInspectionCanvas: React.FC<Props> = ({
     }
   };
 
+  // Convert normalized percent coordinates (0-100) into SVG 400x400 wafer space
+  const mappedDefects = useMemo(() => {
+    return defects.map(d => {
+      // Map percentage location to SVG coordinates inside the wafer
+      const cx = (d.location.x / 100) * 320 + 40;
+      const cy = (d.location.y / 100) * 320 + 40;
+      
+      // Calculate distance from center (200, 200)
+      const distFromCenter = Math.sqrt((cx - 200) ** 2 + (cy - 200) ** 2);
+      const isEdgeRegion = distFromCenter >= 140;
+      const isNotchRegion = cy >= 280 && Math.abs(cx - 200) <= 60;
+      const isCenterCore = distFromCenter < 90;
+
+      // Base radius for heat distribution
+      let heatRadius = 38;
+      if (d.severity === 'critical') heatRadius = 55;
+      else if (d.severity === 'high') heatRadius = 44;
+      else if (d.severity === 'medium') heatRadius = 34;
+
+      if (heatmapIntensity === 'ultra') heatRadius *= 1.35;
+      else if (heatmapIntensity === 'standard') heatRadius *= 0.8;
+
+      return {
+        ...d,
+        svgCx: cx,
+        svgCy: cy,
+        distFromCenter,
+        isEdgeRegion,
+        isNotchRegion,
+        isCenterCore,
+        heatRadius
+      };
+    });
+  }, [defects, heatmapIntensity]);
+
+  // Spatial cluster zones calculation
+  const highDensityClusters = useMemo(() => {
+    if (mappedDefects.length === 0) return [];
+    
+    // Check if there are edge clusters or notch clusters
+    const edgeDefects = mappedDefects.filter(d => d.isEdgeRegion);
+    const centerDefects = mappedDefects.filter(d => d.isCenterCore);
+    const notchDefects = mappedDefects.filter(d => d.isNotchRegion);
+
+    const clusters = [];
+    if (edgeDefects.length >= 1) {
+      const avgX = edgeDefects.reduce((acc, d) => acc + d.svgCx, 0) / edgeDefects.length;
+      const avgY = edgeDefects.reduce((acc, d) => acc + d.svgCy, 0) / edgeDefects.length;
+      clusters.push({
+        id: 'cluster-edge-radial',
+        name: 'Zone A: Edge Radial Excursion Zone',
+        description: 'High shear thermal stress & chamber clamp ring particle deposition',
+        cx: avgX,
+        cy: avgY,
+        rx: 52,
+        ry: 42,
+        severity: 'critical' as DefectSeverity,
+        count: edgeDefects.length,
+        riskScore: '94% P0 Quarantine Risk'
+      });
+    }
+
+    if (centerDefects.length >= 1) {
+      const avgX = centerDefects.reduce((acc, d) => acc + d.svgCx, 0) / centerDefects.length;
+      const avgY = centerDefects.reduce((acc, d) => acc + d.svgCy, 0) / centerDefects.length;
+      clusters.push({
+        id: 'cluster-center-particles',
+        name: 'Zone B: Core Die Contamination Zone',
+        description: 'Suspended aerosol flakes from showerhead gas injector',
+        cx: avgX,
+        cy: avgY,
+        rx: 44,
+        ry: 38,
+        severity: 'high' as DefectSeverity,
+        count: centerDefects.length,
+        riskScore: '78% Yield Risk'
+      });
+    }
+
+    return clusters;
+  }, [mappedDefects]);
+
   return (
     <div className="relative flex flex-col h-full w-full bg-[#08080b] border border-[#1f1f23] rounded-xl overflow-hidden select-none">
       {/* Top Toolbar */}
-      <div className="h-10 bg-[#0d0d12] border-b border-[#1f1f23] px-3 flex items-center justify-between z-10 shrink-0 text-xs">
+      <div className="h-10 bg-[#0d0d12] border-b border-[#1f1f23] px-3 flex items-center justify-between z-10 shrink-0 text-xs flex-wrap gap-2">
         <div className="flex items-center gap-2 font-mono">
           <span className="flex items-center gap-1.5 text-indigo-300 font-bold">
             <Crosshair className="w-3.5 h-3.5 text-indigo-400" />
@@ -150,6 +236,7 @@ export const WaferInspectionCanvas: React.FC<Props> = ({
         {/* View Mode Switcher */}
         <div className="flex items-center bg-[#14141a] border border-[#23232c] rounded-lg p-0.5 font-mono text-[11px]">
           <button
+            id="canvas-view-annotated-btn"
             onClick={() => setViewMode('annotated')}
             className={`px-2 py-0.5 rounded transition cursor-pointer ${
               viewMode === 'annotated' ? 'bg-indigo-600 text-white font-bold' : 'text-[#8e8e93] hover:text-[#e0e0e0]'
@@ -158,6 +245,7 @@ export const WaferInspectionCanvas: React.FC<Props> = ({
             Annotated AI
           </button>
           <button
+            id="canvas-view-original-btn"
             onClick={() => setViewMode('original')}
             className={`px-2 py-0.5 rounded transition cursor-pointer ${
               viewMode === 'original' ? 'bg-indigo-600 text-white font-bold' : 'text-[#8e8e93] hover:text-[#e0e0e0]'
@@ -166,6 +254,7 @@ export const WaferInspectionCanvas: React.FC<Props> = ({
             Raw Surface
           </button>
           <button
+            id="canvas-view-split-btn"
             onClick={() => setViewMode('split')}
             className={`px-2 py-0.5 rounded transition cursor-pointer ${
               viewMode === 'split' ? 'bg-indigo-600 text-white font-bold' : 'text-[#8e8e93] hover:text-[#e0e0e0]'
@@ -175,17 +264,45 @@ export const WaferInspectionCanvas: React.FC<Props> = ({
           </button>
         </div>
 
-        {/* Layer Toggles & Zoom Controls */}
+        {/* Layer Toggles & Heatmap Controls */}
         <div className="flex items-center gap-1.5 font-mono text-xs">
-          <div className="hidden lg:flex items-center gap-1 bg-[#14141a] border border-[#23232c] rounded-lg px-1 py-0.5">
+          <div className="flex items-center gap-1 bg-[#14141a] border border-[#23232c] rounded-lg px-1.5 py-0.5">
+            {/* Spatial Heatmap Toggle */}
             <button
+              id="canvas-toggle-heatmap-btn"
+              onClick={() => setShowHeatmap(!showHeatmap)}
+              className={`px-1.5 py-0.5 rounded cursor-pointer transition flex items-center gap-1 text-[10px] font-bold ${
+                showHeatmap ? 'text-amber-300 bg-amber-950/70 border border-amber-500/40' : 'text-[#71717a]'
+              }`}
+              title="Toggle Spatial Defect Distribution Heatmap"
+            >
+              <Flame className="w-3 h-3 text-amber-400" />
+              <span>Heatmap</span>
+            </button>
+
+            {/* High Density Failure Region Contour Toggle */}
+            <button
+              id="canvas-toggle-failure-regions-btn"
+              onClick={() => setHighlightFailureRegions(!highlightFailureRegions)}
+              className={`p-1 rounded cursor-pointer transition ${
+                highlightFailureRegions ? 'text-red-400 bg-red-950/60' : 'text-[#71717a]'
+              }`}
+              title="Highlight High-Density Failure Regions & Clusters"
+            >
+              <ShieldAlert className="w-3.5 h-3.5" />
+            </button>
+
+            {/* Annotations & Grid Toggles */}
+            <button
+              id="canvas-toggle-annotations-btn"
               onClick={() => setShowAnnotations(!showAnnotations)}
               className={`p-1 rounded cursor-pointer transition ${showAnnotations ? 'text-indigo-400 bg-indigo-950/60' : 'text-[#71717a]'}`}
-              title="Toggle Bounding Boxes"
+              title="Toggle Defect Bounding Boxes"
             >
               {showAnnotations ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
             </button>
             <button
+              id="canvas-toggle-labels-btn"
               onClick={() => setShowLabels(!showLabels)}
               className={`p-1 rounded cursor-pointer transition ${showLabels ? 'text-indigo-400 bg-indigo-950/60' : 'text-[#71717a]'}`}
               title="Toggle Defect Badges & Confidence"
@@ -193,110 +310,122 @@ export const WaferInspectionCanvas: React.FC<Props> = ({
               <Tag className="w-3.5 h-3.5" />
             </button>
             <button
+              id="canvas-toggle-grid-btn"
               onClick={() => setShowGrid(!showGrid)}
               className={`p-1 rounded cursor-pointer transition ${showGrid ? 'text-indigo-400 bg-indigo-950/60' : 'text-[#71717a]'}`}
               title="Toggle Die Reticle Grid"
             >
               <Grid className="w-3.5 h-3.5" />
             </button>
-            <button
-              onClick={() => setShowHeatmap(!showHeatmap)}
-              className={`p-1 rounded cursor-pointer transition ${showHeatmap ? 'text-amber-400 bg-amber-950/60' : 'text-[#71717a]'}`}
-              title="Toggle Defect Density Heatmap"
-            >
-              <Flame className="w-3.5 h-3.5" />
-            </button>
           </div>
 
-          {/* Zoom controls */}
+          {/* Zoom Buttons */}
           <div className="flex items-center bg-[#14141a] border border-[#23232c] rounded-lg p-0.5">
             <button
-              onClick={handleZoomOut}
-              className="p-1 text-[#8e8e93] hover:text-white hover:bg-[#1f1f26] rounded transition cursor-pointer"
-              title="Zoom Out"
-            >
-              <ZoomOut className="w-3.5 h-3.5" />
-            </button>
-            <span className="px-1 text-[10px] text-indigo-300 font-bold min-w-[32px] text-center">
-              {Math.round(zoomLevel * 100)}%
-            </span>
-            <button
               onClick={handleZoomIn}
-              className="p-1 text-[#8e8e93] hover:text-white hover:bg-[#1f1f26] rounded transition cursor-pointer"
+              className="p-1 text-[#8e8e93] hover:text-white transition cursor-pointer"
               title="Zoom In"
             >
               <ZoomIn className="w-3.5 h-3.5" />
             </button>
             <button
-              onClick={handleResetView}
-              className="p-1 text-[#8e8e93] hover:text-white hover:bg-[#1f1f26] rounded transition cursor-pointer ml-0.5"
-              title="Reset View & Recenter"
+              onClick={handleZoomOut}
+              className="p-1 text-[#8e8e93] hover:text-white transition cursor-pointer"
+              title="Zoom Out"
             >
-              <RotateCcw className="w-3.5 h-3.5" />
+              <ZoomOut className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={handleResetView}
+              className="p-1 text-[#8e8e93] hover:text-white transition cursor-pointer"
+              title="Reset Zoom & Pan"
+            >
+              <Maximize2 className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
       </div>
 
-      {/* Main Interactive Stage Container */}
+      {/* Heatmap Sub-Bar when Heatmap is Enabled */}
+      {showHeatmap && (
+        <div className="bg-[#0b0b14] border-b border-[#1b1b28] px-3 py-1 flex items-center justify-between text-[10px] font-mono text-zinc-400 z-10">
+          <div className="flex items-center gap-2">
+            <span className="text-amber-400 font-bold flex items-center gap-1">
+              <Flame className="w-3 h-3 text-amber-500 animate-pulse" />
+              <span>SPATIAL DENSITY HEATMAP:</span>
+            </span>
+            <span className="text-zinc-300">
+              {mappedDefects.length} Coordinate Hotspots Active
+            </span>
+            <span className="text-[#52525b]">•</span>
+            <div className="flex items-center gap-1">
+              <span>Intensity:</span>
+              {(['standard', 'high', 'ultra'] as const).map(mode => (
+                <button
+                  key={mode}
+                  onClick={() => setHeatmapIntensity(mode)}
+                  className={`px-1.5 py-0.2 rounded transition capitalize cursor-pointer ${
+                    heatmapIntensity === mode ? 'bg-amber-500/30 text-amber-200 border border-amber-500/50 font-bold' : 'text-zinc-500 hover:text-zinc-300'
+                  }`}
+                >
+                  {mode}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="hidden sm:flex items-center gap-2">
+            <span>Density Scale:</span>
+            <div className="flex items-center gap-1">
+              <span className="w-2.5 h-2 rounded bg-cyan-500/60 inline-block" />
+              <span className="text-[9px]">Low</span>
+              <span className="w-2.5 h-2 rounded bg-amber-500/70 inline-block" />
+              <span className="text-[9px]">Moderate</span>
+              <span className="w-2.5 h-2 rounded bg-red-500 inline-block" />
+              <span className="text-[9px] text-red-300 font-bold">P0 Excursion</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Canvas Viewport Area */}
       <div 
         ref={containerRef}
+        className={`relative flex-1 w-full h-full overflow-hidden flex items-center justify-center cursor-${isDragging ? 'grabbing' : 'grab'}`}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
-        className={`flex-1 relative overflow-hidden flex items-center justify-center cursor-${isDragging ? 'grabbing' : 'crosshair'} bg-[#060608]`}
-        style={{
-          backgroundImage: 'radial-gradient(circle at 50% 50%, #111118 0%, #060608 100%)'
-        }}
       >
-        {/* Background Grid Accent */}
-        <div 
-          className="absolute inset-0 pointer-events-none opacity-20"
-          style={{
-            backgroundImage: 'linear-gradient(#1f1f2a 1px, transparent 1px), linear-gradient(90deg, #1f1f2a 1px, transparent 1px)',
-            backgroundSize: '24px 24px'
-          }}
-        />
-
-        {/* Loading Scanning Laser Bar during inspection */}
+        {/* Inspection Laser Scan Sweep Effect */}
         {isInspecting && (
-          <div className="absolute inset-x-0 z-30 pointer-events-none flex flex-col items-center">
-            <div className="w-full h-1 bg-gradient-to-r from-transparent via-cyan-400 to-transparent shadow-[0_0_15px_#22d3ee] animate-pulse" />
-            <div className="mt-2 px-3 py-1 rounded bg-black/80 border border-cyan-500/50 text-cyan-300 text-[10px] font-mono font-bold flex items-center gap-1.5 shadow-lg">
-              <Sparkles className="w-3 h-3 text-cyan-400 animate-spin" />
-              <span>Computer Vision Raster Scanning Wafer Surface...</span>
+          <div className="absolute inset-0 z-30 pointer-events-none overflow-hidden">
+            <div className="w-full h-1.5 bg-gradient-to-r from-transparent via-cyan-400 to-transparent shadow-[0_0_20px_#22d3ee] animate-scanline" />
+            <div className="absolute top-3 left-3 bg-cyan-950/90 text-cyan-300 border border-cyan-500/40 px-2 py-1 rounded text-[10px] font-mono flex items-center gap-1.5 shadow-lg">
+              <Radio className="w-3 h-3 animate-pulse text-cyan-400" />
+              <span>E-BEAM & OPTICAL DEFECT MAPPING IN PROGRESS...</span>
             </div>
           </div>
         )}
 
-        {/* Scalable & Pannable Wafer Graphic */}
-        <div
-          className="relative transition-transform duration-75"
+        {/* Wafer Stage Container Scaled and Panned */}
+        <div 
+          className="relative transition-transform duration-75 ease-out"
           style={{
             transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${zoomLevel})`,
-            width: '420px',
-            height: '420px'
+            width: '400px',
+            height: '400px'
           }}
         >
-          {/* Silicon Wafer SVG Render */}
-          <svg
-            viewBox="0 0 400 400"
-            className="w-full h-full drop-shadow-[0_15px_35px_rgba(0,0,0,0.85)] select-none"
-          >
+          {/* Main SVG Circular Wafer Canvas */}
+          <svg viewBox="0 0 400 400" className="w-full h-full drop-shadow-2xl">
             <defs>
-              {/* Metallic Silicon Mirror Gradient */}
-              <radialGradient id="siliconSheen" cx="40%" cy="35%" r="65%">
-                <stop offset="0%" stopColor="#2c303d" />
-                <stop offset="45%" stopColor="#1a1c24" />
-                <stop offset="85%" stopColor="#101117" />
-                <stop offset="100%" stopColor="#08090d" />
-              </radialGradient>
-
-              {/* Edge Exclusion Ring Gradient */}
-              <linearGradient id="edgeExclusionGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#4f46e5" stopOpacity="0.4" />
-                <stop offset="100%" stopColor="#06b6d4" stopOpacity="0.1" />
+              {/* Silicon Mirror Metallic Sheen */}
+              <linearGradient id="siliconSheen" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#1a1c24" />
+                <stop offset="35%" stopColor="#0f1117" />
+                <stop offset="65%" stopColor="#1e2230" />
+                <stop offset="100%" stopColor="#0d0e14" />
               </linearGradient>
 
               {/* Micro-Die Pattern Definition */}
@@ -307,11 +436,21 @@ export const WaferInspectionCanvas: React.FC<Props> = ({
                 <rect x="10" y="5" width="2" height="2" fill="#2d3145" />
               </pattern>
 
-              {/* Heatmap Radial Density Glow */}
-              <radialGradient id="densityHeatmap" cx="70%" cy="30%" r="50%">
-                <stop offset="0%" stopColor="#ef4444" stopOpacity="0.6" />
-                <stop offset="40%" stopColor="#f97316" stopOpacity="0.35" />
-                <stop offset="70%" stopColor="#eab308" stopOpacity="0.15" />
+              {/* Dynamic Defect Radial Heat Gradients */}
+              {mappedDefects.map((d) => (
+                <radialGradient key={`heat-grad-${d.id}`} id={`defectHeatGrad-${d.id}`} cx="50%" cy="50%" r="50%">
+                  <stop offset="0%" stopColor="#ffffff" stopOpacity="0.85" />
+                  <stop offset="20%" stopColor={d.severity === 'critical' ? '#ef4444' : '#f97316'} stopOpacity="0.7" />
+                  <stop offset="50%" stopColor={d.severity === 'critical' ? '#f97316' : '#eab308'} stopOpacity="0.45" />
+                  <stop offset="80%" stopColor="#06b6d4" stopOpacity="0.2" />
+                  <stop offset="100%" stopColor="transparent" stopOpacity="0" />
+                </radialGradient>
+              ))}
+
+              {/* High-Density Cluster Area Gradient */}
+              <radialGradient id="clusterPulseGrad" cx="50%" cy="50%" r="50%">
+                <stop offset="0%" stopColor="#ef4444" stopOpacity="0.45" />
+                <stop offset="60%" stopColor="#f97316" stopOpacity="0.25" />
                 <stop offset="100%" stopColor="transparent" stopOpacity="0" />
               </radialGradient>
 
@@ -333,10 +472,57 @@ export const WaferInspectionCanvas: React.FC<Props> = ({
               {/* Central Mirror Reflection Shimmer */}
               <ellipse cx="160" cy="140" rx="140" ry="85" fill="#ffffff" opacity="0.03" transform="rotate(-25 160 140)" />
 
-              {/* Optional Density Heatmap Overlay */}
+              {/* Spatial Defect Distribution Heatmap Layer */}
               {showHeatmap && (
-                <rect x="0" y="0" width="400" height="400" fill="url(#densityHeatmap)" opacity="0.75" />
+                <g id="spatial-defect-heatmap-layer" opacity={0.88}>
+                  {mappedDefects.map((d) => (
+                    <circle
+                      key={`heat-spot-${d.id}`}
+                      cx={d.svgCx}
+                      cy={d.svgCy}
+                      r={d.heatRadius}
+                      fill={`url(#defectHeatGrad-${d.id})`}
+                      className="mix-blend-screen"
+                    />
+                  ))}
+                </g>
               )}
+
+              {/* High-Density Failure Regions Highlights & Contours */}
+              {showHeatmap && highlightFailureRegions && highDensityClusters.map((cluster) => (
+                <g key={cluster.id} id={`failure-region-${cluster.id}`}>
+                  {/* Glowing Cluster Base */}
+                  <ellipse
+                    cx={cluster.cx}
+                    cy={cluster.cy}
+                    rx={cluster.rx}
+                    ry={cluster.ry}
+                    fill="url(#clusterPulseGrad)"
+                    className="mix-blend-screen"
+                  />
+                  {/* Dashed High-Density Perimeter Contour */}
+                  <ellipse
+                    cx={cluster.cx}
+                    cy={cluster.cy}
+                    rx={cluster.rx}
+                    ry={cluster.ry}
+                    fill="none"
+                    stroke="#ef4444"
+                    strokeWidth="1.5"
+                    strokeDasharray="4 3"
+                    opacity="0.85"
+                  />
+                  {/* Cluster Centroid Marker */}
+                  <circle
+                    cx={cluster.cx}
+                    cy={cluster.cy}
+                    r="3"
+                    fill="#ef4444"
+                    stroke="#ffffff"
+                    strokeWidth="1"
+                  />
+                </g>
+              ))}
 
               {/* Reticle Grid Lines if Enabled */}
               {showGrid && (
@@ -365,6 +551,35 @@ export const WaferInspectionCanvas: React.FC<Props> = ({
               {/* Orientation Flat / Notch at 6 o'clock */}
               <path d="M 194 384 L 200 380 L 206 384 Z" fill="#08080c" stroke="#6366f1" strokeWidth="1" />
             </g>
+
+            {/* High-Density Zone Labels on SVG */}
+            {showHeatmap && highlightFailureRegions && highDensityClusters.map((cluster) => (
+              <g key={`label-${cluster.id}`} transform={`translate(${Math.min(310, Math.max(70, cluster.cx))}, ${Math.max(25, cluster.cy - cluster.ry - 8)})`}>
+                <rect
+                  x="-65"
+                  y="-11"
+                  width="130"
+                  height="16"
+                  rx="3"
+                  fill="#1a0b0e"
+                  stroke="#ef4444"
+                  strokeWidth="0.8"
+                  opacity="0.9"
+                />
+                <text
+                  x="0"
+                  y="0"
+                  fontSize="7.5"
+                  fontFamily="monospace"
+                  fontWeight="bold"
+                  fill="#fca5a5"
+                  textAnchor="middle"
+                  alignmentBaseline="middle"
+                >
+                  HIGH DENSITY: {cluster.name.split(':')[0]}
+                </text>
+              </g>
+            ))}
 
             {/* Wafer Coordinate Axis Markers */}
             <g fontSize="8" fontFamily="monospace" fill="#52566b">

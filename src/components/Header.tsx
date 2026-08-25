@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { UserProfile, WaferInspectionRecord, MachineHealthRecord } from '../types';
+import { ActiveOperatorsIndicator } from './ActiveOperatorsIndicator';
 import { 
   Microscope, 
   Sparkles, 
@@ -43,6 +44,7 @@ interface Props {
   onOpenSystemHealth?: () => void;
   onOpenHelpDocs?: () => void;
   unreadNotificationsCount?: number;
+  onShowToast?: (message: string, type: 'info' | 'warning' | 'success' | 'error') => void;
 }
 
 export const Header: React.FC<Props> = ({
@@ -63,7 +65,8 @@ export const Header: React.FC<Props> = ({
   onOpenNotifications,
   onOpenSystemHealth,
   onOpenHelpDocs,
-  unreadNotificationsCount = 2
+  unreadNotificationsCount = 2,
+  onShowToast
 }) => {
   const [showSessionMenu, setShowSessionMenu] = useState(false);
   const hasAnomaly = machines.some(m => m.anomalyDetected);
@@ -82,9 +85,9 @@ export const Header: React.FC<Props> = ({
       id="app-header"
       className="h-14 border-b border-[#1a1a24] bg-[#09090d]/95 backdrop-blur-md px-3 sm:px-5 flex items-center justify-between z-20 shrink-0 select-none gap-3 text-white font-mono text-xs"
     >
-      {/* Left: Wafer Batch / Lot Breadcrumb Selector */}
+      {/* Left: Wafer Batch / Lot Breadcrumb Selector & Real-Time Active Operators Indicator */}
       <div className="flex items-center gap-2.5 min-w-0">
-        <div className="flex items-center gap-2 bg-[#121218] border border-[#22222e] rounded-xl px-3 py-1.5 text-xs">
+        <div className="flex items-center gap-2 bg-[#121218] border border-[#22222e] rounded-xl px-3 py-1.5 text-xs shrink-0">
           <Microscope className="w-4 h-4 text-indigo-400 shrink-0" />
           <span className="text-[#71717a] hidden sm:inline">Active Wafer:</span>
           <select
@@ -103,16 +106,23 @@ export const Header: React.FC<Props> = ({
           </select>
         </div>
 
+        {/* Real-time Active Operators & Concurrency Shield Indicator */}
+        <ActiveOperatorsIndicator 
+          currentInspection={currentInspection}
+          currentUser={currentUser}
+          onShowToast={onShowToast}
+        />
+
         {/* Global Search Quick Trigger */}
         {onOpenGlobalSearch && (
           <button
             id="global-search-btn"
             onClick={onOpenGlobalSearch}
-            className="hidden lg:flex items-center gap-2 bg-[#12121c] hover:bg-[#181826] border border-[#222232] hover:border-indigo-500/50 px-2.5 py-1.5 rounded-xl text-[#8e8e98] hover:text-white transition cursor-pointer text-[11px]"
+            className="hidden xl:flex items-center gap-2 bg-[#12121c] hover:bg-[#181826] border border-[#222232] hover:border-indigo-500/50 px-2.5 py-1.5 rounded-xl text-[#8e8e98] hover:text-white transition cursor-pointer text-[11px]"
             title="Global Search across Wafers, Tools, SOPs (⌘K)"
           >
             <Search className="w-3.5 h-3.5 text-indigo-400" />
-            <span>Search Metrology Index...</span>
+            <span>Search Metrology...</span>
             <kbd className="px-1.5 py-0.2 rounded bg-[#181826] border border-[#2c2c40] text-[9px] text-[#71717a]">⌘K</kbd>
           </button>
         )}
@@ -121,13 +131,13 @@ export const Header: React.FC<Props> = ({
         {hasAnomaly ? (
           <button
             onClick={() => onNavigateTab('machines')}
-            className="hidden md:flex items-center gap-1.5 bg-red-950/60 hover:bg-red-900/60 border border-red-500/50 px-2.5 py-1 rounded-lg text-red-300 text-[11px] font-bold cursor-pointer animate-pulse transition"
+            className="hidden 2xl:flex items-center gap-1.5 bg-red-950/60 hover:bg-red-900/60 border border-red-500/50 px-2.5 py-1 rounded-lg text-red-300 text-[11px] font-bold cursor-pointer animate-pulse transition"
           >
             <AlertTriangle className="w-3.5 h-3.5 text-red-400" />
             <span>M-03 CHAMBER DRIFT</span>
           </button>
         ) : (
-          <div className="hidden md:flex items-center gap-1.5 bg-emerald-950/40 border border-emerald-500/30 px-2.5 py-1 rounded-lg text-emerald-300 text-[11px]">
+          <div className="hidden 2xl:flex items-center gap-1.5 bg-emerald-950/40 border border-emerald-500/30 px-2.5 py-1 rounded-lg text-emerald-300 text-[11px]">
             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
             <span>Fleet Nominal</span>
           </div>

@@ -930,6 +930,8 @@ You can inspect the full defect classification under **Defect Taxonomy**, inspec
           {/* 9. Production Analytics & Yield Trends */}
           {effectiveTab === 'analytics' && (
             <ProductionAnalyticsView 
+              machines={machines}
+              historicalCases={historicalCases}
               onTriggerCopilot={handleTriggerCopilotWithPrompt}
             />
           )}

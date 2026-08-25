@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   WaferInspectionRecord, 
   DefectItem, 
@@ -8,6 +8,7 @@ import {
   DefectSeverity
 } from '../types';
 import { WaferInspectionCanvas } from './WaferInspectionCanvas';
+import { operatorPresenceService, PresenceState } from '../services/operatorPresenceService';
 import { 
   Scan, 
   Upload, 
@@ -28,7 +29,11 @@ import {
   Sparkles,
   ExternalLink,
   ChevronRight,
-  Maximize2
+  Maximize2,
+  Users,
+  Lock,
+  Unlock,
+  Radio
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -53,6 +58,15 @@ export const AIInspectionView: React.FC<Props> = ({
   onUpdateModelConfig,
   allSampleInspections
 }) => {
+  const [presence, setPresence] = useState<PresenceState>(() => operatorPresenceService.getState());
+
+  useEffect(() => {
+    const unsub = operatorPresenceService.subscribe((state) => {
+      setPresence(state);
+    });
+    return () => unsub();
+  }, []);
+
   const [isScanning, setIsScanning] = useState(false);
   const [selectedDefect, setSelectedDefect] = useState<DefectItem | null>(null);
   const [activePipelineStep, setActivePipelineStep] = useState<number>(0);
@@ -227,6 +241,29 @@ export const AIInspectionView: React.FC<Props> = ({
               })}
             </div>
           </div>
+
+          {/* Real-time Operator Concurrency Lock Banner */}
+          {presence.lockInfo.lockedBy && presence.lockInfo.lockedBy.status === 'MODIFYING' && (
+            <div className="bg-amber-950/40 border border-amber-500/50 rounded-xl px-3.5 py-2 flex items-center justify-between gap-3 text-xs font-mono text-amber-200">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping shrink-0" />
+                <span className="truncate">
+                  <strong className="text-white">{presence.lockInfo.lockedBy.name}</strong> ({presence.lockInfo.lockedBy.station}) is modifying {presence.lockInfo.lockedSection || 'this wafer record'}.
+                </span>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="text-[10px] px-2 py-0.5 rounded bg-amber-900/60 border border-amber-500/40 text-amber-300 uppercase font-bold">
+                  Conflict Guard Active
+                </span>
+                <button
+                  onClick={() => operatorPresenceService.requestOrTakeoverLock()}
+                  className="text-[10px] px-2 py-0.5 rounded bg-amber-500 hover:bg-amber-400 text-black font-bold transition cursor-pointer"
+                >
+                  Takeover Lock
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Wafer Visualizer Canvas */}
           <div className="flex-1 min-h-[440px] w-full">

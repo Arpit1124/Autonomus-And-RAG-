@@ -488,7 +488,7 @@ export const AuthPage: React.FC<Props> = ({
       <div className="absolute bottom-1/4 -right-32 w-96 h-96 bg-purple-600/10 rounded-full blur-3xl pointer-events-none" />
 
       {/* Main Card Container */}
-      <div className="w-full max-w-5xl z-10 space-y-6">
+      <div className="w-full max-w-2xl z-10 space-y-6">
         {/* Brand Header */}
         <div className="flex flex-col items-center justify-center text-center space-y-3">
           <WaferLogo size="lg" showSubtitle={false} badge="Fab-09 Cleanroom" />
@@ -496,7 +496,7 @@ export const AuthPage: React.FC<Props> = ({
           <h1 className="text-xl sm:text-2xl font-bold text-white font-mono tracking-tight">
             Autonomous Semiconductor Quality & Metrology Platform
           </h1>
-          <p className="text-xs text-[#8e8e98] max-w-2xl mx-auto font-mono">
+          <p className="text-xs text-[#8e8e98] max-w-xl mx-auto font-mono">
             PBKDF2 Cryptographic Encryption, 24-Hour & 30-Day Token Sessions, Rate-Limited Brute Force Defense, and SEMI E10 Role-Based Access Control.
           </p>
         </div>
@@ -545,11 +545,11 @@ export const AuthPage: React.FC<Props> = ({
           </div>
         )}
 
-        {/* Main Content Area: 2 Columns on Desktop */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 bg-[#0b0b10] border border-[#1a1a26] rounded-2xl p-4 sm:p-7 shadow-2xl">
+        {/* Main Content Card */}
+        <div className="bg-[#0b0b10] border border-[#1a1a26] rounded-2xl p-5 sm:p-7 shadow-2xl space-y-6">
           
-          {/* LEFT COLUMN: Auth Modes (Sign In, Sign Up, Forgot Password, Verify Email) */}
-          <div className="lg:col-span-7 space-y-6">
+          {/* Auth Modes (Sign In, Sign Up, Forgot Password, Verify Email) */}
+          <div className="space-y-6">
             
             {/* Mode Switcher Buttons */}
             <div className="flex items-center gap-2 border-b border-[#1a1a26] pb-3">
@@ -1107,84 +1107,31 @@ export const AuthPage: React.FC<Props> = ({
 
           </div>
 
-          {/* RIGHT COLUMN: 1-Click Persona Quick Logins & Security Architecture */}
-          <div className="lg:col-span-5 border-t lg:border-t-0 lg:border-l border-[#1a1a26] pt-6 lg:pt-0 lg:pl-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-mono text-[#8e8e98] uppercase font-bold">
-                1-Click Fab Persona Logins:
-              </span>
+          {/* Security Architecture Compliance Box */}
+          <div className="p-3.5 rounded-xl bg-[#0e0e16] border border-[#1e1e2c] space-y-2 text-[11px] font-mono text-[#71717a]">
+            <div className="font-bold text-white flex items-center justify-between text-xs">
+              <div className="flex items-center gap-1.5">
+                <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                <span>Enterprise Security Architecture</span>
+              </div>
               <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-indigo-950 text-indigo-300 border border-indigo-500/30">
                 PBKDF2 Verified
               </span>
             </div>
-
-            <div className="space-y-2.5">
-              {availableUsers.map((user) => {
-                const roleMeta = getRoleBadge(user.role);
-                const isCurrent = activePersonaId === user.id;
-
-                return (
-                  <button
-                    key={user.id}
-                    type="button"
-                    onClick={() => handleDemoSignIn(user)}
-                    disabled={isLoading}
-                    className="w-full text-left p-3 rounded-xl bg-[#101018] hover:bg-[#161624] border border-[#202030] hover:border-indigo-500/60 transition group cursor-pointer space-y-1.5 relative overflow-hidden"
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-7 h-7 rounded-lg bg-indigo-950 border border-indigo-500/40 flex items-center justify-center font-mono font-bold text-indigo-300 text-xs">
-                          {user.name.charAt(0)}
-                        </div>
-                        <div>
-                          <div className="font-bold text-white text-xs font-mono flex items-center gap-1.5">
-                            <span>{user.name}</span>
-                          </div>
-                          <div className="text-[10px] text-[#71717a] font-mono truncate max-w-[150px]">
-                            {user.email}
-                          </div>
-                        </div>
-                      </div>
-
-                      <span className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded border uppercase shrink-0 ${roleMeta.bg}`}>
-                        {roleMeta.label}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center justify-between text-[10px] font-mono text-indigo-400 group-hover:text-indigo-300 pt-0.5">
-                      <span className="text-[#8e8e98]">{user.department}</span>
-                      <div className="flex items-center gap-1">
-                        <span>Sign In</span>
-                        <ArrowRight className="w-3 h-3 transform group-hover:translate-x-1 transition" />
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Security Architecture Compliance Box */}
-            <div className="p-3.5 rounded-xl bg-[#0e0e16] border border-[#1e1e2c] space-y-2 text-[11px] font-mono text-[#71717a]">
-              <div className="font-bold text-white flex items-center gap-1.5 text-xs">
-                <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                <span>Enterprise Security Architecture</span>
-              </div>
-              <ul className="space-y-1 text-[10px]">
-                <li className="flex items-center gap-1.5 text-[#a1a1aa]">
-                  <Check className="w-3 h-3 text-emerald-400" />
-                  <span>PBKDF2 (100,000 iterations, SHA-512) Password Hashing</span>
-                </li>
-                <li className="flex items-center gap-1.5 text-[#a1a1aa]">
-                  <Check className="w-3 h-3 text-emerald-400" />
-                  <span>5-Attempt Rate Limiting with 15-Min Lockout Freeze</span>
-                </li>
-                <li className="flex items-center gap-1.5 text-[#a1a1aa]">
-                  <Check className="w-3 h-3 text-emerald-400" />
-                  <span>Token Session Expiry & "Logout From All Devices"</span>
-                </li>
-              </ul>
-            </div>
-
+            <ul className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[10px] pt-1 border-t border-[#1a1a28]">
+              <li className="flex items-center gap-1.5 text-[#a1a1aa]">
+                <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <span>PBKDF2 (100k Iterations, SHA-512)</span>
+              </li>
+              <li className="flex items-center gap-1.5 text-[#a1a1aa]">
+                <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <span>Rate Limiting & Lockout Freeze</span>
+              </li>
+              <li className="flex items-center gap-1.5 text-[#a1a1aa]">
+                <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <span>24h / 30d Token Session Expiry</span>
+              </li>
+            </ul>
           </div>
 
         </div>
